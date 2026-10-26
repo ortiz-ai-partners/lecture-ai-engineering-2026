@@ -89,6 +89,10 @@ GitHub の自分の fork で、`lec01` → `main` の PR を作成します。**
 
 ```bash
 AIE_MODEL=gemini-3.5-flash uv run python -m app.ask "LoRAとは何ですか？"
+AIE_MODEL=gemini-3.1-pro-preview uv run python -m app.ask "LoRAとは何ですか？"
 ```
+
+発展に取り組む場合は、同じ質問で `AIE_MODEL` の値を変えて実行し、表示された応答時間・入力トークン数・出力トークン数を記録します。通信状況などで応答時間は変動するため、各モデル・質問で複数回実行し、平均やばらつきも比べるとよいでしょう。
+`gemini-3.1-pro-preview` はプレビュー版のモデルです。利用できない場合は、利用可能なモデル ID に置き換えてください。
 
 temperature を変えるには、`generate_content` の `config` 引数を調べてみましょう。
