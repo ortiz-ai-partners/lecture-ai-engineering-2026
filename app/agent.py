@@ -143,6 +143,8 @@ def run_with_approval(target: Agent, question: str, model, approve=ask_approvals
             message_history=result.all_messages(),
             deferred_tool_results=approve(result.output),
             model=model,
+            # 再開した run_sync は usage を0から数え直すため、前の回の分を渡して合算する
+            usage=result.usage,
         )
     return result
 

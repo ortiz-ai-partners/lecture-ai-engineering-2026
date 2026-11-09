@@ -98,3 +98,16 @@ def test_save_learning_log_is_not_written_when_denied(log_dir):
     # 断られたことが、ツールの結果としてモデルに伝わっている
     returns = [p for m in result.all_messages() for p in m.parts if isinstance(p, ToolReturnPart)]
     assert any("断りました" in str(p.content) for p in returns)
+
+
+def test_usage_counts_requests_across_approval(log_dir):
+    """承認で実行が2回に分かれても、requests は LLM を呼んだ合計回数になる。"""
+    model = TestModel(call_tools=["save_learning_log"])
+
+    def approve_all(requests):
+        from pydantic_ai import DeferredToolResults
+        return DeferredToolResults(approvals={c.tool_call_id: True for c in requests.approvals})
+
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=approve_all)
+    model_responses = [m for m in result.all_messages() if m.kind == "response"]
+    assert result.usage.requests == len(model_responses) == 2
