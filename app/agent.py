@@ -35,19 +35,27 @@ INSTRUCTIONS = """\
 - 用語集に見つからないことは、推測で断定せず「用語集にはない」と伝える。
 - 回答の最後に、関係する回（第N回）を示す。
 - 宿題の答えそのものは書かず、考え方のヒントで導く。
-- 学習の記録を残したいと頼まれたら save_learning_log を使う。保存を断られたら、無理に保存しない。
 """
 
 # モデルは実行時に渡す（テストではAPIを呼ばない TestModel に差し替えるため）
-# output_type に DeferredToolRequests を含めると、承認が必要なツールの呼び出しで
-# 実行がいったん止まり、「承認待ちの呼び出し」が result.output として返ってくる
-agent = Agent(instructions=INSTRUCTIONS, output_type=[str, DeferredToolRequests])
+agent = Agent(instructions=INSTRUCTIONS)
 agent.tool_plain(tools.search_glossary)
 agent.tool_plain(tools.get_lecture_summary)
 
 agent.tool_plain(tools.make_quiz)
-# 第3回 宿題（実装）: ファイルに書き込むツールは、実行前に利用者の承認を挟む（human-in-the-loop）
-agent.tool_plain(tools.save_learning_log, requires_approval=True)
+
+# 第3回 宿題（実装）: 学習ログを保存できるエージェント（--log で使う）
+# 講座の agent とテストはそのまま残し、書き込みのできる別のエージェントとして分けた。
+# output_type に DeferredToolRequests を含めると、承認が必要なツールの呼び出しで
+# 実行がいったん止まり、「承認待ちの呼び出し」が result.output として返ってくる
+LOG_INSTRUCTIONS = INSTRUCTIONS + (
+    "- 学習の記録を残したいと頼まれたら save_learning_log を使う。保存を断られたら、無理に保存しない。\n"
+)
+log_agent = Agent(instructions=LOG_INSTRUCTIONS, output_type=[str, DeferredToolRequests])
+for _tool in (tools.search_glossary, tools.get_lecture_summary, tools.make_quiz):
+    log_agent.tool_plain(_tool)
+# ファイルに書き込むツールは、実行前に利用者の承認を挟む（human-in-the-loop）
+log_agent.tool_plain(tools.save_learning_log, requires_approval=True)
 
 # 第5回: 使う MCP サーバーの設定ファイル。Claude Desktop や Cursor と同じ "mcpServers" 形式
 MCP_CONFIG = Path(__file__).resolve().parent / "mcp_servers.json"
@@ -144,10 +152,11 @@ def main() -> None:
     parser.add_argument("question", nargs="?")
     parser.add_argument("--trace", action="store_true", help="ツール呼び出しを表示する")
     parser.add_argument("--mcp", action="store_true", help="第5回: ツールを MCP サーバー（app/mcp_servers.json）から受け取る")
+    parser.add_argument("--log", action="store_true", help="第3回 宿題: 学習ログを保存できるエージェントを使う（保存前に確認あり）")
     parser.add_argument("--list-tools", action="store_true", help="モデルに見えるツール一覧を表示して終了する（APIキー不要）")
     args = parser.parse_args()
 
-    target = build_mcp_agent() if args.mcp else agent
+    target = build_mcp_agent() if args.mcp else (log_agent if args.log else agent)
     if args.list_tools:
         print_tools(target)
         return

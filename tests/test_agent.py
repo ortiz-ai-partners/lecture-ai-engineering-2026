@@ -18,10 +18,7 @@ def _parts(result, kind):
 
 
 def test_base_tools_are_registered_and_called():
-    # 第3回 宿題: 承認が必要な save_learning_log まで呼ぶと実行が承認待ちで止まるため、
-    # 「全部呼ぶ」から承認なしで動くツールだけを呼ぶ形に変更（承認の流れは下の宿題テストで確認）
-    no_approval = [t.name for t in agent._function_toolset.tools.values() if not t.requires_approval]
-    model = TestModel(call_tools=no_approval)
+    model = TestModel()
     with agent.override(model=model):
         result = agent.run_sync("LoRAとは？")
 
@@ -49,7 +46,7 @@ from pydantic_ai import DeferredToolRequests
 from pydantic_ai.tools import ToolDenied
 
 from app import tools
-from app.agent import run_with_approval
+from app.agent import log_agent, run_with_approval
 
 
 @pytest.fixture
@@ -62,8 +59,8 @@ def log_dir(tmp_path, monkeypatch):
 
 def test_save_learning_log_stops_for_approval(log_dir):
     model = TestModel(call_tools=["save_learning_log"])
-    with agent.override(model=model):
-        result = agent.run_sync("今日学んだことを記録して")
+    with log_agent.override(model=model):
+        result = log_agent.run_sync("今日学んだことを記録して")
     # 承認前なので実行は止まり、承認待ちの呼び出しが返る。ファイルはまだ書かれない
     assert isinstance(result.output, DeferredToolRequests)
     assert [c.tool_name for c in result.output.approvals] == ["save_learning_log"]
@@ -79,7 +76,7 @@ def test_save_learning_log_writes_after_approval(log_dir):
         from pydantic_ai import DeferredToolResults
         return DeferredToolResults(approvals={c.tool_call_id: True for c in requests.approvals})
 
-    result = run_with_approval(agent, "今日学んだことを記録して", model, approve=approve_all)
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=approve_all)
     assert seen == ["save_learning_log"]
     assert isinstance(result.output, str)
     files = list(log_dir.glob("*.md"))
@@ -95,7 +92,7 @@ def test_save_learning_log_is_not_written_when_denied(log_dir):
             approvals={c.tool_call_id: ToolDenied("利用者が保存を断りました。") for c in requests.approvals}
         )
 
-    result = run_with_approval(agent, "今日学んだことを記録して", model, approve=deny_all)
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=deny_all)
     assert isinstance(result.output, str)
     assert not log_dir.exists()
     # 断られたことが、ツールの結果としてモデルに伝わっている
