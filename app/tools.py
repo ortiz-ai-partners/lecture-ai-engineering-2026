@@ -5,10 +5,14 @@
 """
 
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+# 第3回 宿題: 学習ログの保存先（.gitignore 済み。個人の記録は共有しない）
+LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -77,3 +81,41 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回（1始まりの整数）の用語から1つ選び、確認問題とその答えを返す。
+
+    利用者が「第N回の確認問題を出して」「クイズを出して」のように、
+    理解度を確かめる問題を求めたときに使う。用語の説明を求められたときは使わず、
+    search_glossary を使うこと。答え（answer）は、利用者が解答するまで見せない。
+    """
+    terms = [e for e in load_glossary() if e["lecture"] == lecture]
+    if not terms:
+        available = sorted({e["lecture"] for e in load_glossary()})
+        return f"第{lecture}回の用語は用語集にありません。用語がある回: {', '.join(map(str, available))}"
+    entry = random.choice(terms)
+    return json.dumps(
+        {
+            "lecture": lecture,
+            "question": f"「{entry['term']}」の意味は？",
+            "answer": entry["definition"],
+        },
+        ensure_ascii=False,
+    )
+
+
+def save_learning_log(title: str, content: str) -> str:
+    """学習の記録を learning_log/ の今日の日付のファイル（YYYY-MM-DD.md）に追記する。
+
+    利用者が「今日学んだことを記録して」「メモを残して」のように、
+    学習の記録を保存したいと明示したときだけ使う。質問に答えるだけのときは使わない。
+    title には記録の見出し（例: "LoRAとQLoRAの違い"）、content には利用者が残したい内容を入れる。
+    保存の前に、利用者の確認（承認）を必ず挟む。
+    """
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    now = datetime.now()
+    path = LOG_DIR / f"{now:%Y-%m-%d}.md"
+    with path.open("a", encoding="utf-8") as f:
+        f.write(f"## {title}（{now:%H:%M}）\n\n{content}\n\n")
+    return f"learning_log/{path.name} に保存しました。"

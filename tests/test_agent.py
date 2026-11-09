@@ -37,3 +37,77 @@ def test_glossary_result_reaches_the_model():
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
     assert returns and returns[0].tool_name == "search_glossary"
+
+
+# --- 第3回 宿題（実装）: save_learning_log と承認 ---
+
+import pytest
+from pydantic_ai import DeferredToolRequests
+from pydantic_ai.tools import ToolDenied
+
+from app import tools
+from app.agent import log_agent, run_with_approval
+
+
+@pytest.fixture
+def log_dir(tmp_path, monkeypatch):
+    """本物の learning_log/ を汚さないよう、保存先を一時フォルダに差し替える。"""
+    d = tmp_path / "learning_log"
+    monkeypatch.setattr(tools, "LOG_DIR", d)
+    return d
+
+
+def test_save_learning_log_stops_for_approval(log_dir):
+    model = TestModel(call_tools=["save_learning_log"])
+    with log_agent.override(model=model):
+        result = log_agent.run_sync("今日学んだことを記録して")
+    # 承認前なので実行は止まり、承認待ちの呼び出しが返る。ファイルはまだ書かれない
+    assert isinstance(result.output, DeferredToolRequests)
+    assert [c.tool_name for c in result.output.approvals] == ["save_learning_log"]
+    assert not log_dir.exists()
+
+
+def test_save_learning_log_writes_after_approval(log_dir):
+    model = TestModel(call_tools=["save_learning_log"])
+    seen = []
+
+    def approve_all(requests):
+        seen.extend(c.tool_name for c in requests.approvals)
+        from pydantic_ai import DeferredToolResults
+        return DeferredToolResults(approvals={c.tool_call_id: True for c in requests.approvals})
+
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=approve_all)
+    assert seen == ["save_learning_log"]
+    assert isinstance(result.output, str)
+    files = list(log_dir.glob("*.md"))
+    assert len(files) == 1 and files[0].read_text(encoding="utf-8").startswith("## ")
+
+
+def test_save_learning_log_is_not_written_when_denied(log_dir):
+    model = TestModel(call_tools=["save_learning_log"])
+
+    def deny_all(requests):
+        from pydantic_ai import DeferredToolResults
+        return DeferredToolResults(
+            approvals={c.tool_call_id: ToolDenied("利用者が保存を断りました。") for c in requests.approvals}
+        )
+
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=deny_all)
+    assert isinstance(result.output, str)
+    assert not log_dir.exists()
+    # 断られたことが、ツールの結果としてモデルに伝わっている
+    returns = [p for m in result.all_messages() for p in m.parts if isinstance(p, ToolReturnPart)]
+    assert any("断りました" in str(p.content) for p in returns)
+
+
+def test_usage_counts_requests_across_approval(log_dir):
+    """承認で実行が2回に分かれても、requests は LLM を呼んだ合計回数になる。"""
+    model = TestModel(call_tools=["save_learning_log"])
+
+    def approve_all(requests):
+        from pydantic_ai import DeferredToolResults
+        return DeferredToolResults(approvals={c.tool_call_id: True for c in requests.approvals})
+
+    result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=approve_all)
+    model_responses = [m for m in result.all_messages() if m.kind == "response"]
+    assert result.usage.requests == len(model_responses) == 2
