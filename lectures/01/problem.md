@@ -95,4 +95,15 @@ AIE_MODEL=gemini-3.1-pro-preview uv run python -m app.ask "LoRAとは何です�
 発展に取り組む場合は、同じ質問で `AIE_MODEL` の値を変えて実行し、表示された応答時間・入力トークン数・出力トークン数を記録します。通信状況などで応答時間は変動するため、各モデル・質問で複数回実行し、平均やばらつきも比べるとよいでしょう。
 `gemini-3.1-pro-preview` はプレビュー版のモデルです。利用できない場合は、利用可能なモデル ID に置き換えてください。
 
+### 呼び出すモデルについての補足
+モデルの仕様は更新されることがあります。  
+gemini 3.5 flashにおいては、Gemini APIのドキュメントが更新され、非推奨となりgemini 3.6 flashへ転送されるようになりました。
+
+- 参考：Gemini 3.5 Flashのドキュメント
+https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash?hl=ja
+
+このように、サービスとして提供されているLLMは頻繁に仕様が変わるため、サービス仕様のドキュメントを確認するなどの習慣を付けておき仕様変更に対応しましょう。
+
+第1回の宿題においては、任意にモデルを変えて実施していただければ問題ありません。
+
 temperature を変えるには、`generate_content` の `config` 引数を調べてみましょう。
