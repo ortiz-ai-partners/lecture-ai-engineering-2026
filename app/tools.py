@@ -85,7 +85,6 @@ def get_lecture_summary(lecture: int) -> str:
     return path.read_text(encoding="utf-8")
 
 
-<<<<<<< HEAD
 def make_quiz(lecture: int) -> str:
     """指定した回（1始まりの整数）の用語から1つ選び、確認問題とその答えを返す。
 
@@ -122,7 +121,8 @@ def save_learning_log(title: str, content: str) -> str:
     with path.open("a", encoding="utf-8") as f:
         f.write(f"## {title}（{now:%H:%M}）\n\n{content}\n\n")
     return f"learning_log/{path.name} に保存しました。"
-=======
+
+
 def search_materials(query: str) -> str:
     """第1〜3回の本講義資料を検索し、関連ページの本文・タイトル・ページ番号を返す。
 
@@ -168,4 +168,3 @@ def search_graph(query: str) -> str:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
     except APIError as e:
         return json.dumps({"error": api_error_message(e.code)}, ensure_ascii=False)
->>>>>>> upstream/main

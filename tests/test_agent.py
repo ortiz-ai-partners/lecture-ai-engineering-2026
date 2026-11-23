@@ -44,8 +44,8 @@ def test_material_result_reaches_the_model(monkeypatch):
     with agent.override(model=model):
         result = agent.run_sync("RAGとは？")
     returns = _parts(result, ToolReturnPart)
-<<<<<<< HEAD
-    assert returns and returns[0].tool_name == "search_glossary"
+    assert returns and returns[0].tool_name == "search_materials"
+    assert json.loads(returns[0].content)["results"] == [hit]
 
 
 # --- 第3回 宿題（実装）: save_learning_log と承認 ---
@@ -120,7 +120,3 @@ def test_usage_counts_requests_across_approval(log_dir):
     result = run_with_approval(log_agent, "今日学んだことを記録して", model, approve=approve_all)
     model_responses = [m for m in result.all_messages() if m.kind == "response"]
     assert result.usage.requests == len(model_responses) == 2
-=======
-    assert returns and returns[0].tool_name == "search_materials"
-    assert json.loads(returns[0].content)["results"] == [hit]
->>>>>>> upstream/main

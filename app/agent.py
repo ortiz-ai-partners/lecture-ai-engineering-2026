@@ -30,7 +30,10 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.providers.google import GoogleProvider
 
+from pydantic_ai.capabilities import ProcessHistory
+
 from app import tools
+from app.compaction import COMPACTED_KEY, compact_tree_history
 from app.retrieval import run_full_context
 from app.config import MODEL, api_error_message, get_api_key
 
@@ -96,6 +99,14 @@ for _tool in (tools.search_glossary, tools.get_lecture_summary, tools.make_quiz)
 # ファイルに書き込むツールは、実行前に利用者の承認を挟む（human-in-the-loop）
 log_agent.tool_plain(tools.save_learning_log, requires_approval=True)
 
+# 第5回 宿題（発展）: 目次の候補一覧を、たどり終えたら短い記録に置き換える Tree。
+# 比較のため、元の --tree はそのまま残し、--tree-compact で切り替える。
+tree_compact_agent = Agent(
+    instructions=TREE_INSTRUCTIONS,
+    tools=[tools.browse_tree],
+    capabilities=[ProcessHistory(compact_tree_history)],
+)
+
 # 第5回: 使う MCP サーバーの設定ファイル。Claude Desktop や Cursor と同じ "mcpServers" 形式
 MCP_CONFIG = Path(__file__).resolve().parent / "mcp_servers.json"
 
@@ -159,7 +170,11 @@ def print_trace(result, elapsed_seconds: float | None = None) -> None:
                 print(f"[tool call]   {part.tool_name}({part.args})")
             elif isinstance(part, ToolReturnPart):
                 if part.tool_name == "browse_tree":
-                    data = json.loads(part.content)
+                    # コンパクションで置き換えた場合も、traceには元の目次を表示する
+                    original = (part.metadata or {}).get(COMPACTED_KEY)
+                    if original:
+                        print("  （この目次は次の応答から短い記録に置き換え済み）")
+                    data = json.loads(original or part.content)
                     if "error" in data:
                         print(f"[tool return] {part.tool_name} -> {data['error']}")
                     else:
@@ -217,40 +232,25 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="学習支援エージェントに質問する")
     parser.add_argument("question", nargs="?")
     parser.add_argument("--trace", action="store_true", help="ツール呼び出しを表示する")
-<<<<<<< HEAD
-    parser.add_argument("--mcp", action="store_true", help="第5回: ツールを MCP サーバー（app/mcp_servers.json）から受け取る")
-    parser.add_argument("--log", action="store_true", help="第3回 宿題: 学習ログを保存できるエージェントを使う（保存前に確認あり）")
-    parser.add_argument("--list-tools", action="store_true", help="モデルに見えるツール一覧を表示して終了する（APIキー不要）")
-    args = parser.parse_args()
-
-    target = build_mcp_agent() if args.mcp else (log_agent if args.log else agent)
-    if args.list_tools:
-        print_tools(target)
-        return
-    if not args.question:
-        parser.error("質問を指定してください")
-
-    print(f"[model] {MODEL}")
-    if args.mcp:
-        print("[tools] MCP サーバー（app/mcp_servers.json）")
-    try:
-        result = run_with_approval(target, args.question, build_model())
-    except ModelHTTPError as e:
-        print(api_error_message(e.status_code, str(e.body)[:200]))
-        raise SystemExit(1)
-    print(result.output)
-    if args.trace:
-        print_trace(result)
-=======
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--mcp", action="store_true", help="第5回: ツールを MCP サーバー（app/mcp_servers.json）から受け取る")
+    modes.add_argument("--log", action="store_true", help="第3回 宿題: 学習ログを保存できるエージェントを使う（保存前に確認あり）")
     modes.add_argument("--graph", action="store_true", help="検索結果からグラフをたどり、候補ページを読んで答える")
     modes.add_argument("--tree", action="store_true", help="目次をたどり、必要なページを読んで答える")
+    modes.add_argument("--tree-compact", action="store_true",
+                       help="第5回 宿題: --tree と同じだが、たどり終えた目次の候補一覧を短い記録に置き換える")
     modes.add_argument("--full-context", action="store_true", help="検索せず、lectures.jsonの全資料を一度に渡す")
     parser.add_argument("--list-tools", action="store_true", help="モデルに見えるツール一覧を表示して終了する（APIキー不要）")
     args = parser.parse_args()
 
-    target = build_mcp_agent() if args.mcp else agent
+    if args.mcp:
+        target = build_mcp_agent()
+    elif args.log:
+        target = log_agent
+    elif args.tree_compact:
+        target = tree_compact_agent
+    else:
+        target = agent
     mode = nullcontext()
     if args.tree:
         mode = target.override(instructions=TREE_INSTRUCTIONS, tools=[tools.browse_tree])
@@ -279,7 +279,8 @@ def main() -> None:
                     instructions=FULL_CONTEXT_INSTRUCTIONS, prompt_template=FULL_CONTEXT_PROMPT,
                 )
             else:
-                result = target.run_sync(args.question, model=build_model())
+                # 第3回 宿題: 承認待ちで止まったら確認をとって再開する（--log 以外ではそのまま1回で終わる）
+                result = run_with_approval(target, args.question, build_model())
         except ModelHTTPError as e:
             print(api_error_message(e.status_code, str(e.body)[:200]))
             raise SystemExit(1)
@@ -287,7 +288,6 @@ def main() -> None:
         print(result.output)
         if args.trace:
             print_trace(result, elapsed_seconds)
->>>>>>> upstream/main
 
 
 if __name__ == "__main__":
